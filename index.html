@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Carnet d'amitié">
+<title>Carnet d'amitié</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  body { font-family: 'Nunito', sans-serif; background: #faf5ff; }
+  .font-display { font-family: 'Fredoka', sans-serif; }
+  .font-body { font-family: 'Nunito', sans-serif; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+/* ---------------------------------------------------------------------- */
+/* ICONS (simple inline SVG — no external icon dependency)                 */
+/* ---------------------------------------------------------------------- */
+
+const IconBase = ({ children, size = 16, className = "", strokeWidth = 2 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {children}
+  </svg>
+);
+const IconTrash = (p) => (
+  <IconBase {...p}><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></IconBase>
+);
+const IconLock = (p) => (
+  <IconBase {...p}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></IconBase>
+);
+const IconUnlock = (p) => (
+  <IconBase {...p}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></IconBase>
+);
+const IconChevronDown = (p) => (<IconBase {...p}><polyline points="6 9 12 15 18 9"/></IconBase>);
+const IconPlus = (p) => (<IconBase {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></IconBase>);
+const IconListChecks = (p) => (
+  <IconBase {...p}><path d="M3 6l2 2 4-4"/><path d="M3 14l2 2 4-4"/><line x1="13" y1="6" x2="21" y2="6"/><line x1="13" y1="14" x2="21" y2="14"/></IconBase>
+);
+const IconBarChart = (p) => (<IconBase {...p}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></IconBase>);
+const IconCalendar = (p) => (<IconBase {...p}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></IconBase>);
+const IconSettings = (p) => (
+  <IconBase {...p}><circle cx="12" cy="12" r="3"/>
+  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></IconBase>
+);
+const IconHeart = (p) => (
+  <svg width={p.size||22} height={p.size||22} viewBox="0 0 24 24" fill="currentColor" className={p.className||""}>
+    <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z"/>
+  </svg>
+);
+const IconSparkles = (p) => (<IconBase {...p} strokeWidth={1.5}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 3v4"/><path d="M21 5h-4"/></IconBase>);
+const IconRepeat = (p) => (<IconBase {...p}><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></IconBase>);
+const IconDownload = (p) => (<IconBase {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></IconBase>);
+
+/* ---------------------------------------------------------------------- */
+/* CONSTANTS & PURE HELPERS (unchanged logic from the tested version)      */
+/* ---------------------------------------------------------------------- */
+
+const MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+const DAYS_FR = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+const STORAGE_KEY = "amitie-data";
+
+const FREQUENCIES = [
+  { value: "monthly", label: "Tous les mois" },
+  { value: "semiannual", label: "Tous les 6 mois" },
+  { value: "annual", label: "Tous les ans" },
+];
+const FREQUENCY_MONTHS = { monthly: 1, semiannual: 6, annual: 12 };
+
+const SEASON_PRESETS = [
+  { label: "Toute l'année", months: null },
+  { label: "Printemps", months: [3,4,5] },
+  { label: "Été", months: [6,7,8] },
+  { label: "Automne", months: [9,10,11] },
+  { label: "Hiver", months: [12,1,2] },
+];
+const WEEK_POSITIONS = [
+  { value: "1", label: "1er" }, { value: "2", label: "2e" }, { value: "3", label: "3e" },
+  { value: "4", label: "4e" }, { value: "last", label: "Dernier" },
+];
+
+const THEME = {
+  current: { container: "bg-white border-2 border-fuchsia-500 shadow-sm", header: "bg-fuchsia-50", title: "text-fuchsia-800 font-bold", divider: "divide-fuchsia-100" },
+  future: { container: "bg-white border border-violet-300", header: "bg-violet-50", title: "text-violet-900 font-semibold", divider: "divide-violet-100", pill: "border-violet-400 text-violet-700 hover:bg-violet-100" },
+  past: { container: "bg-white border border-pink-300", header: "bg-pink-50", title: "text-pink-900 font-semibold", divider: "divide-pink-100", pill: "border-pink-400 text-pink-700 hover:bg-pink-100" },
+};
+
+const ASK_CLAUDE_PROMPT = "Aide-moi à organiser une sortie entre amis ! Pose-moi des questions une par une sur le thème (si j'en ai un), la date, le nombre de participants et le lieu. Une fois que tu as assez d'infos, propose-moi exactement 5 idées d'activités fun et originales, adaptées à la saison et à la météo probable à cette période. Si je te demande des idées plus classiques, adapte-toi.";
+
+function monthKey(date) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}`; }
+function monthLabel(key) { const [y,m]=key.split("-").map(Number); return `${MONTHS_FR[m-1]} ${y}`; }
+function compareMonthKeysDesc(a,b) { return a<b?1:a>b?-1:0; }
+function monthsBetween(aKey,bKey){ const [ay,am]=aKey.split("-").map(Number); const [by,bm]=bKey.split("-").map(Number); return (by-ay)*12+(bm-am); }
+function getFutureMonthKeys(n){ const keys=[]; const d=new Date(); for(let i=1;i<=n;i++){ const f=new Date(d.getFullYear(),d.getMonth()+i,1); keys.push(monthKey(f)); } return keys; }
+function friendAppearsInMonth(friend,targetKey,currentKey){ if(targetKey===currentKey) return true; const offset=monthsBetween(currentKey,targetKey); const step=FREQUENCY_MONTHS[friend.frequency]||1; return offset>0 && offset%step===0; }
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function isoDate(date){ return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`; }
+function formatDateFR(date){ return `${DAYS_FR[date.getDay()]} ${date.getDate()} ${MONTHS_FR[date.getMonth()].toLowerCase()} ${date.getFullYear()}`; }
+function todayMidnight(){ const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
+
+function nextWeekdayOnOrAfter(fromDate,dayOfWeek){ const d=new Date(fromDate); const diff=(dayOfWeek-d.getDay()+7)%7; d.setDate(d.getDate()+diff); return d; }
+function nthWeekdayOfMonth(year,monthIdx,dayOfWeek,position){
+  if(position==="last"){ let d=new Date(year,monthIdx+1,0); while(d.getDay()!==dayOfWeek) d=new Date(d.getFullYear(),d.getMonth(),d.getDate()-1); return d; }
+  const pos=Number(position); let count=0; let d=new Date(year,monthIdx,1);
+  while(d.getMonth()===monthIdx){ if(d.getDay()===dayOfWeek){ count++; if(count===pos) return d; } d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1); }
+  return null;
+}
+function isMonthAllowed(date,seasonMonths){ if(!seasonMonths||seasonMonths.length===0) return true; return seasonMonths.includes(date.getMonth()+1); }
+function nextOccurrence(plan, from = todayMidnight()){
+  const start=new Date(from.getFullYear(),from.getMonth(),from.getDate());
+  if(plan.type==="annual"){ let year=start.getFullYear(); let d=new Date(year,plan.month-1,plan.day); if(d<start) d=new Date(year+1,plan.month-1,plan.day); return d; }
+  if(plan.type==="weekly"){ let d=nextWeekdayOnOrAfter(start,plan.dayOfWeek); let guard=0; while(!isMonthAllowed(d,plan.seasonMonths)&&guard<60){ d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+7); guard++; } return d; }
+  if(plan.type==="monthly"){
+    let y=start.getFullYear(); let m=start.getMonth(); let guard=0;
+    while(guard<24){ const c=nthWeekdayOfMonth(y,m,plan.dayOfWeek,plan.weekPosition); if(c&&c>=start&&isMonthAllowed(c,plan.seasonMonths)) return c; m++; if(m>11){m=0;y++;} guard++; }
+    return null;
+  }
+  return null;
+}
+function planOccursInMonth(plan,monthKeyStr){
+  const [y,m]=monthKeyStr.split("-").map(Number); const monthStart=new Date(y,m-1,1);
+  if(plan.type==="annual") return plan.month===m;
+  if(plan.type==="weekly") return isMonthAllowed(monthStart,plan.seasonMonths);
+  if(plan.type==="monthly"){ if(!isMonthAllowed(monthStart,plan.seasonMonths)) return false; return !!nthWeekdayOfMonth(y,m-1,plan.dayOfWeek,plan.weekPosition); }
+  return false;
+}
+function recurrenceLabel(plan){
+  if(plan.type==="annual") return `Chaque année, le ${plan.day} ${MONTHS_FR[plan.month-1].toLowerCase()}`;
+  if(plan.type==="weekly") return `Chaque ${DAYS_FR[plan.dayOfWeek].toLowerCase()}`;
+  if(plan.type==="monthly"){ const pos=WEEK_POSITIONS.find(p=>p.value===plan.weekPosition)?.label||""; return `${pos} ${DAYS_FR[plan.dayOfWeek].toLowerCase()} du mois`; }
+  return "";
+}
+
+function downloadICS(title, dateStr, notes) {
+  const dt = dateStr.replace(/-/g, "");
+  const escaped = (notes || "").replace(/\n/g, "\\n").replace(/,/g, "\\,");
+  const ics = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Carnet d'amitie//FR","BEGIN:VEVENT",
+    `UID:${uid()}@carnet-amitie`,`SUMMARY:${title}`,`DTSTART;VALUE=DATE:${dt}`,`DESCRIPTION:${escaped}`,
+    "END:VEVENT","END:VCALENDAR"].join("\r\n");
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `${title.replace(/[^a-z0-9]/gi,"-")||"sortie"}.ics`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function loadData() {
+  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : null; }
+  catch (e) { return null; }
+}
+function saveData(state) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); return true; }
+  catch (e) { return false; }
+}
+
+/* ================================ APP ROOT ================================ */
+
+function AmitieTracker() {
+  const [loaded, setLoaded] = useState(false);
+  const [friends, setFriends] = useState([]);
+  const [checksByMonth, setChecksByMonth] = useState({});
+  const [outings, setOutings] = useState([]);
+  const [recurringPlans, setRecurringPlans] = useState([]);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState("reminder");
+
+  const currentKey = monthKey(new Date());
+
+  useEffect(() => {
+    const parsed = loadData();
+    if (parsed) {
+      const loadedFriends = (parsed.friends || []).map((f) => ({ ...f, frequency: f.frequency || "monthly" }));
+      const raw = parsed.checksByMonth || {};
+      const migrated = {};
+      Object.keys(raw).forEach((k) => {
+        const entry = raw[k];
+        if (entry && typeof entry === "object" && "checks" in entry) {
+          let roster = entry.roster;
+          if (!roster && entry.friendIds) {
+            roster = entry.friendIds.map((id) => {
+              const f = loadedFriends.find((x) => x.id === id);
+              return f ? { id: f.id, name: f.name } : null;
+            }).filter(Boolean);
+          }
+          migrated[k] = { checks: entry.checks || {}, ...(roster ? { roster } : {}), ...(entry.excludedIds ? { excludedIds: entry.excludedIds } : {}) };
+        } else {
+          migrated[k] = { checks: entry || {} };
+        }
+      });
+      setFriends(loadedFriends);
+      setChecksByMonth(migrated);
+      setOutings(parsed.outings || []);
+      setRecurringPlans(parsed.recurringPlans || []);
+    }
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    setChecksByMonth((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      if (!next[currentKey]) { next[currentKey] = { checks: {} }; changed = true; }
+      Object.keys(next).forEach((k) => {
+        if (k >= currentKey) return;
+        if (!next[k].roster) { next[k] = { ...next[k], roster: friends.map((f) => ({ id: f.id, name: f.name })) }; changed = true; }
+      });
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, currentKey]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const ok = saveData({ friends, checksByMonth, outings, recurringPlans });
+    setError(ok ? null : "La sauvegarde locale a échoué (mémoire du navigateur peut-être pleine).");
+  }, [friends, checksByMonth, outings, recurringPlans, loaded]);
+
+  function addFriend(name, frequency = "monthly") {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const newFriend = { id: uid(), name: trimmed, frequency };
+    setFriends((prev) => [...prev, newFriend]);
+    return newFriend;
+  }
+  function renameFriend(id, name) { setFriends((prev) => prev.map((f) => (f.id === id ? { ...f, name } : f))); }
+  function removeFriend(id) { setFriends((prev) => prev.filter((f) => f.id !== id)); }
+  function setFriendFrequency(id, frequency) { setFriends((prev) => prev.map((f) => (f.id === id ? { ...f, frequency } : f))); }
+  function toggleCheck(key, friendId) {
+    setChecksByMonth((prev) => {
+      const entry = prev[key] || { checks: {} };
+      const nextChecks = { ...entry.checks, [friendId]: !entry.checks[friendId] };
+      return { ...prev, [key]: { ...entry, checks: nextChecks } };
+    });
+  }
+  function removeFromMonth(key, friendId) {
+    setChecksByMonth((prev) => {
+      const entry = prev[key] || { checks: {} };
+      const excluded = new Set(entry.excludedIds || []);
+      excluded.add(friendId);
+      return { ...prev, [key]: { ...entry, excludedIds: Array.from(excluded) } };
+    });
+  }
+  function addOuting(outing) { setOutings((prev) => [...prev, { id: uid(), ...outing }]); }
+  function removeOuting(id) { setOutings((prev) => prev.filter((o) => o.id !== id)); }
+  function addRecurringPlan(plan) { setRecurringPlans((prev) => [...prev, { id: uid(), ...plan }]); }
+  function removeRecurringPlan(id) { setRecurringPlans((prev) => prev.filter((p) => p.id !== id)); }
+
+  if (!loaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 via-purple-50 to-violet-100">
+        <p className="text-fuchsia-700 font-serif text-lg">On feuillette ton carnet… ✨</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen flex flex-col bg-gradient-to-br from-pink-50 via-purple-50 to-violet-100">
+      <div className="flex-1 overflow-y-auto">
+        <header className="pt-10 pb-6 px-6 border-b border-purple-100">
+          <p className="font-body italic text-fuchsia-600 text-sm tracking-wide mb-1">là où vos amitiés fleurissent 🌸</p>
+          <h1 className="font-display text-3xl text-purple-900 font-bold flex items-center gap-2">
+            Carnet d'amitié <IconHeart size={22} className="text-fuchsia-500 shrink-0" />
+          </h1>
+        </header>
+
+        <main className="px-4 pt-6 pb-10 max-w-xl mx-auto">
+          {error && <div className="mb-4 px-4 py-2 rounded-lg bg-red-50 text-red-700 text-sm font-body">{error}</div>}
+
+          {page === "reminder" && (
+            <ReminderPage friends={friends} checksByMonth={checksByMonth} currentKey={currentKey}
+              addFriend={addFriend} renameFriend={renameFriend} removeFriend={removeFriend}
+              toggleCheck={toggleCheck} removeFromMonth={removeFromMonth} recurringPlans={recurringPlans} />
+          )}
+          {page === "stats" && <StatsPage friends={friends} checksByMonth={checksByMonth} currentKey={currentKey} />}
+          {page === "settings" && (
+            <SettingsPage friends={friends} addFriend={addFriend} renameFriend={renameFriend} removeFriend={removeFriend} setFriendFrequency={setFriendFrequency} />
+          )}
+          {page === "agenda" && (
+            <AgendaPage friends={friends} addFriend={addFriend} outings={outings} addOuting={addOuting} removeOuting={removeOuting}
+              recurringPlans={recurringPlans} addRecurringPlan={addRecurringPlan} removeRecurringPlan={removeRecurringPlan} />
+          )}
+        </main>
+      </div>
+
+      <nav className="shrink-0 bg-white border-t border-purple-100 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <NavButton label="Rappels" Icon={IconListChecks} active={page === "reminder"} onClick={() => setPage("reminder")} />
+        <NavButton label="Stats" Icon={IconBarChart} active={page === "stats"} onClick={() => setPage("stats")} />
+        <NavButton label="Agenda" Icon={IconCalendar} active={page === "agenda"} onClick={() => setPage("agenda")} />
+        <NavButton label="Paramètres" Icon={IconSettings} active={page === "settings"} onClick={() => setPage("settings")} />
+      </nav>
+    </div>
+  );
+}
+
+function NavButton({ label, Icon, active, onClick }) {
+  return (
+    <button onClick={onClick} className="flex-1 flex flex-col items-center gap-1 py-2.5 font-body text-xs transition-colors">
+      <span className={`flex items-center justify-center w-10 h-10 rounded-2xl transition-colors ${active ? "bg-fuchsia-100 text-fuchsia-700" : "text-stone-400"}`}>
+        <Icon size={19} strokeWidth={active ? 2.4 : 1.8} />
+      </span>
+      <span className={active ? "text-fuchsia-700 font-semibold" : "text-stone-400"}>{label}</span>
+    </button>
+  );
+}
+
+/* ---------------------------- PAGE 1 : RAPPELS ---------------------------- */
+
+function ReminderPage({ friends, checksByMonth, currentKey, addFriend, renameFriend, removeFriend, toggleCheck, removeFromMonth, recurringPlans }) {
+  const [newName, setNewName] = useState("");
+  const [unlockedMonths, setUnlockedMonths] = useState({});
+  const currentCardRef = useRef(null);
+
+  useEffect(() => { currentCardRef.current?.scrollIntoView({ block: "start" }); }, []);
+
+  function toggleUnlock(key) { setUnlockedMonths((prev) => ({ ...prev, [key]: !prev[key] })); }
+  function handleAdd() { addFriend(newName); setNewName(""); }
+
+  const futureKeys = useMemo(() => getFutureMonthKeys(12).sort(compareMonthKeysDesc), [currentKey]);
+  const pastKeys = Object.keys(checksByMonth).filter((k) => k < currentKey).sort(compareMonthKeysDesc);
+
+  return (
+    <>
+      {futureKeys.length > 0 && (
+        <div className="space-y-5 mb-5">
+          <p className="font-body text-xs uppercase tracking-widest text-stone-400 px-1">✨ À venir</p>
+          {futureKeys.map((key) => {
+            const entry = checksByMonth[key] || {};
+            const excludedIds = entry.excludedIds || [];
+            const recurringFriendIds = new Set();
+            recurringPlans.forEach((p) => { if (planOccursInMonth(p, key)) (p.friendIds || []).forEach((fid) => recurringFriendIds.add(fid)); });
+            const rosterFriends = friends.filter((f) => (friendAppearsInMonth(f, key, currentKey) || recurringFriendIds.has(f.id)) && !excludedIds.includes(f.id));
+            return (
+              <MonthCard key={key} label={monthLabel(key)} isCurrent={false} theme="future"
+                unlocked={!!unlockedMonths[key]} friends={rosterFriends} checks={entry.checks || {}}
+                onToggle={(fid) => toggleCheck(key, fid)} onToggleUnlock={() => toggleUnlock(key)}
+                onRemoveFromMonth={(fid) => removeFromMonth(key, fid)}
+                emptyText="Rien de prévu pour l'instant… l'avenir est encore à écrire !" />
+            );
+          })}
+        </div>
+      )}
+
+      <div ref={currentCardRef}>
+        <MonthCard label={monthLabel(currentKey)} isCurrent theme="current" friends={friends}
+          checks={checksByMonth[currentKey]?.checks || {}} onToggle={(fid) => toggleCheck(currentKey, fid)}
+          onRename={renameFriend} onRemove={removeFriend}
+          emptyText="Ton carnet est encore vierge — ajoute un·e ami·e pour commencer l'aventure !" />
+      </div>
+
+      <div className="flex gap-2 mt-3 mb-4">
+        <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAdd()} placeholder="Ajouter un·e ami·e…" className="flex-1 px-4 py-2.5 rounded-xl border border-purple-200 bg-white font-body text-purple-950 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-500" />
+        <button onClick={handleAdd} className="px-4 py-2.5 rounded-xl bg-fuchsia-600 text-white flex items-center gap-1.5 font-body font-semibold hover:bg-fuchsia-700 transition-colors">
+          <IconPlus size={18} /> Ajouter
+        </button>
+      </div>
+      <p className="font-body text-xs text-stone-400 mb-6 px-1">Envie d'un rythme personnalisé pour quelqu'un ? Direction l'onglet Paramètres.</p>
+
+      {pastKeys.length > 0 && (
+        <div className="space-y-5">
+          <p className="font-body text-xs uppercase tracking-widest text-stone-400 px-1">💭 Mois précédents</p>
+          {pastKeys.map((key) => {
+            const entry = checksByMonth[key] || {};
+            const rosterFriends = entry.roster || [];
+            return (
+              <MonthCard key={key} label={monthLabel(key)} isCurrent={false} theme="past"
+                unlocked={!!unlockedMonths[key]} friends={rosterFriends} checks={entry.checks || {}}
+                onToggle={(fid) => toggleCheck(key, fid)} onToggleUnlock={() => toggleUnlock(key)}
+                emptyText="Ce mois-là n'a pas encore d'histoire à raconter." />
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+function MonthCard({ label, isCurrent, theme, unlocked, friends, checks, onToggle, onRename, onRemove, onToggleUnlock, onRemoveFromMonth, emptyText }) {
+  const editable = isCurrent || unlocked;
+  const t = THEME[theme] || THEME.current;
+  return (
+    <div className={`rounded-3xl overflow-hidden mb-4 transition-colors ${t.container}`}>
+      <div className={`flex items-center justify-between px-4 py-3 ${t.header}`}>
+        <h2 className={`font-display text-lg ${t.title}`}>{label}</h2>
+        {!isCurrent && (
+          <button onClick={onToggleUnlock} aria-label={unlocked ? "Verrouiller ce mois" : "Modifier ce mois"} className={`flex items-center gap-1 text-xs font-body font-semibold px-2.5 py-1 rounded-full border transition-colors ${t.pill}`}>
+            {unlocked ? <IconUnlock size={13} /> : <IconLock size={13} />}
+            {unlocked ? "Verrouiller" : "Modifier"}
+          </button>
+        )}
+      </div>
+      {friends.length === 0 ? (
+        <p className="font-body text-sm px-4 py-4 text-stone-400">{emptyText}</p>
+      ) : (
+        <ul className={`divide-y ${t.divider}`}>
+          {friends.map((f) => (
+            <li key={f.id} className="flex items-center px-4 py-2.5 gap-3">
+              {isCurrent ? (
+                <input value={f.name} onChange={(e) => onRename(f.id, e.target.value)} className="flex-1 bg-transparent font-body text-purple-950 focus:outline-none focus:bg-fuchsia-50 rounded px-1.5 py-0.5" />
+              ) : (
+                <span className="flex-1 font-body text-purple-950">{f.name}</span>
+              )}
+              <input type="checkbox" checked={!!checks[f.id]} disabled={!editable} onChange={() => onToggle(f.id)} className="w-6 h-6 shrink-0 accent-fuchsia-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-70" />
+              {isCurrent && (<button onClick={() => onRemove(f.id)} className="text-stone-300 hover:text-red-600 transition-colors"><IconTrash size={16} /></button>)}
+              {!isCurrent && unlocked && onRemoveFromMonth && (<button onClick={() => onRemoveFromMonth(f.id)} className="text-stone-300 hover:text-red-600 transition-colors"><IconTrash size={16} /></button>)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------- PAGE 2 : PARAMÈTRES --------------------------- */
+
+function SettingsPage({ friends, addFriend, renameFriend, removeFriend, setFriendFrequency }) {
+  const [newName, setNewName] = useState("");
+  const [newFrequency, setNewFrequency] = useState("monthly");
+  function handleAdd() { if (!newName.trim()) return; addFriend(newName, newFrequency); setNewName(""); setNewFrequency("monthly"); }
+  return (
+    <>
+      <p className="font-body text-sm text-stone-500 mb-4">Ici, tu choisis qui compte pour toi — et à quel rythme tu veux prendre de leurs nouvelles. 💌</p>
+      <div className="bg-white rounded-3xl border border-purple-100 p-4 mb-6 shadow-sm">
+        <p className="font-display text-base text-purple-900 font-semibold mb-3">Ajouter un·e ami·e</p>
+        <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAdd()} placeholder="Prénom…" className="w-full mb-3 px-4 py-2.5 rounded-xl border border-purple-200 bg-white font-body text-purple-950 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-500" />
+        <FrequencyPicker value={newFrequency} onChange={setNewFrequency} />
+        <button onClick={handleAdd} className="w-full mt-3 py-2.5 rounded-xl bg-fuchsia-600 text-white flex items-center justify-center gap-1.5 font-body font-semibold hover:bg-fuchsia-700 transition-colors">
+          <IconPlus size={18} /> Ajouter
+        </button>
+      </div>
+      {friends.length === 0 ? (
+        <div className="text-center py-12 px-6"><IconSparkles size={28} className="mx-auto mb-3 text-fuchsia-300" /><p className="font-body text-stone-400 text-sm">Ta liste d'ami·e·s attend son premier nom !</p></div>
+      ) : (
+        <div className="space-y-3">
+          {friends.map((f) => (
+            <div key={f.id} className="bg-white rounded-3xl border border-purple-100 p-4 shadow-sm">
+              <div className="flex items-center gap-3 mb-3">
+                <input value={f.name} onChange={(e) => renameFriend(f.id, e.target.value)} className="flex-1 bg-transparent font-body text-purple-950 focus:outline-none focus:bg-fuchsia-50 rounded px-1.5 py-0.5" />
+                <button onClick={() => removeFriend(f.id)} className="text-stone-300 hover:text-red-600 transition-colors"><IconTrash size={16} /></button>
+              </div>
+              <FrequencyPicker value={f.frequency || "monthly"} onChange={(freq) => setFriendFrequency(f.id, freq)} />
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function FrequencyPicker({ value, onChange }) {
+  return (
+    <div className="flex gap-1.5">
+      {FREQUENCIES.map((freq) => (
+        <button key={freq.value} type="button" onClick={() => onChange(freq.value)} className={`flex-1 py-1.5 rounded-lg text-xs font-body font-semibold border transition-colors ${value === freq.value ? "bg-fuchsia-600 border-fuchsia-600 text-white" : "bg-white border-purple-200 text-purple-500 hover:bg-purple-50"}`}>
+          {freq.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ----------------------------- PAGE 3 : STATS ----------------------------- */
+
+function SimpleBarChart({ data, maxValue }) {
+  return (
+    <div className="space-y-3">
+      {data.map((d) => (
+        <div key={d.id} className="flex items-center gap-2">
+          <div className="w-20 shrink-0 font-body text-xs text-purple-950 truncate text-right pr-1">{d.name}</div>
+          <div className="flex-1 bg-fuchsia-50 rounded-full h-5 relative overflow-hidden">
+            <div className="bg-fuchsia-600 h-full rounded-full" style={{ width: `${maxValue > 0 ? (d.count / maxValue) * 100 : 0}%` }} />
+          </div>
+          <div className="w-12 shrink-0 font-body text-xs text-stone-500">{d.count}/{d.total}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatsPage({ friends, checksByMonth, currentKey }) {
+  const [mode, setMode] = useState("all");
+  const [expandedId, setExpandedId] = useState(null);
+  const monthKeys = useMemo(() => Object.keys(checksByMonth).filter((k) => k <= currentKey).sort(), [checksByMonth, currentKey]);
+  const years = useMemo(() => { const set = new Set(monthKeys.map((k) => k.split("-")[0])); return Array.from(set).sort((a, b) => b - a); }, [monthKeys]);
+  const [selectedYear, setSelectedYear] = useState(years[0] || String(new Date().getFullYear()));
+
+  useEffect(() => { if (years.length > 0 && !years.includes(selectedYear)) setSelectedYear(years[0]); }, [years.join(",")]);
+
+  const relevantKeys = mode === "all" ? monthKeys : monthKeys.filter((k) => k.startsWith(selectedYear + "-"));
+  function wasTracked(key, friendId) { if (key === currentKey) return true; return (checksByMonth[key]?.roster || []).some((r) => r.id === friendId); }
+
+  const statsData = friends.map((f) => {
+    const eligibleKeys = relevantKeys.filter((k) => wasTracked(k, f.id));
+    const count = eligibleKeys.filter((k) => checksByMonth[k]?.checks?.[f.id]).length;
+    let lastSeenKey = null;
+    for (let i = monthKeys.length - 1; i >= 0; i--) { if (checksByMonth[monthKeys[i]]?.checks?.[f.id]) { lastSeenKey = monthKeys[i]; break; } }
+    return { id: f.id, name: f.name, count, total: eligibleKeys.length, lastSeenKey };
+  }).sort((a, b) => b.count - a.count);
+
+  const totalMonthsTracked = monthKeys.length;
+  const checkedThisMonth = friends.filter((f) => checksByMonth[currentKey]?.checks?.[f.id]).length;
+  const topFriend = statsData.find((s) => s.count > 0);
+  const maxValue = Math.max(1, mode === "all" ? totalMonthsTracked : relevantKeys.length);
+
+  if (friends.length === 0) {
+    return (<div className="text-center py-16 px-6"><IconSparkles size={32} className="mx-auto mb-3 text-fuchsia-300" /><p className="font-body text-stone-500">Tes statistiques prendront vie dès que tu auras ajouté des ami·e·s !</p></div>);
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-2 mb-6">
+        <StatCard label="Amis suivis" value={friends.length} />
+        <StatCard label="Vus ce mois-ci" value={`${checkedThisMonth}/${friends.length}`} />
+        <StatCard label="Mois suivis" value={totalMonthsTracked} />
+      </div>
+      {topFriend && (
+        <div className="mb-6 px-4 py-3 rounded-2xl bg-fuchsia-50 border border-fuchsia-200 font-body text-sm text-fuchsia-900">
+          🏆 <span className="font-bold">{topFriend.name}</span> est la personne que tu as le plus vue{mode === "year" ? ` en ${selectedYear}` : ""}, avec {topFriend.count} mois sur {topFriend.total}.
+        </div>
+      )}
+      <div className="flex gap-2 mb-4">
+        <SegButton active={mode === "all"} onClick={() => setMode("all")}>Par mois</SegButton>
+        <SegButton active={mode === "year"} onClick={() => setMode("year")}>Par année</SegButton>
+      </div>
+      {mode === "year" && years.length > 0 && (
+        <div className="flex gap-2 mb-4 overflow-x-auto">
+          {years.map((y) => (<button key={y} onClick={() => setSelectedYear(y)} className={`px-3 py-1.5 rounded-full text-sm font-body font-semibold border shrink-0 transition-colors ${selectedYear === y ? "bg-fuchsia-600 border-fuchsia-600 text-white" : "bg-white border-purple-200 text-purple-500 hover:bg-purple-50"}`}>{y}</button>))}
+        </div>
+      )}
+      <p className="font-body text-xs text-stone-400 mb-2 px-1">{mode === "all" ? `Fréquence de rencontre sur les ${totalMonthsTracked} mois suivis` : `Fréquence de rencontre en ${selectedYear}`}</p>
+      <div className="bg-white rounded-3xl border border-purple-100 p-4 mb-6 shadow-sm">
+        <SimpleBarChart data={statsData} maxValue={maxValue} />
+      </div>
+      <ul className="bg-white rounded-3xl border border-purple-100 divide-y divide-purple-50 overflow-hidden shadow-sm">
+        {statsData.map((s) => {
+          const isOpen = expandedId === s.id;
+          const seenMonths = relevantKeys.filter((k) => checksByMonth[k]?.checks?.[s.id]).sort(compareMonthKeysDesc);
+          return (
+            <li key={s.id}>
+              <button onClick={() => setExpandedId(isOpen ? null : s.id)} className="w-full flex items-center justify-between px-4 py-3 gap-3 text-left hover:bg-fuchsia-50 transition-colors">
+                <span className="font-body text-purple-950">{s.name}</span>
+                <span className="flex items-center gap-2">
+                  <span className="font-body text-xs text-stone-500 text-right">{s.count}/{s.total} mois<br/>{s.lastSeenKey===null?"jamais vu·e":s.lastSeenKey===currentKey?"vu·e ce mois-ci":`vu·e il y a ${monthsBetween(s.lastSeenKey,currentKey)} mois`}</span>
+                  <IconChevronDown size={16} className={`text-fuchsia-400 shrink-0 transition-transform ${isOpen?"rotate-180":""}`} />
+                </span>
+              </button>
+              {isOpen && (
+                <div className="px-4 pb-3 -mt-1">
+                  {seenMonths.length === 0 ? (<p className="font-body text-sm text-stone-400 italic">Pas encore vu·e sur cette période.</p>) : (
+                    <div className="flex flex-wrap gap-1.5">{seenMonths.map((k) => (<span key={k} className="px-2.5 py-1 rounded-full bg-fuchsia-50 text-fuchsia-800 font-body text-xs font-semibold">{monthLabel(k)}</span>))}</div>
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (<div className="bg-white rounded-2xl border border-purple-100 py-3 text-center shadow-sm"><p className="font-display text-2xl text-fuchsia-700 font-bold">{value}</p><p className="font-body text-xs text-stone-500">{label}</p></div>);
+}
+function SegButton({ active, onClick, children }) {
+  return (<button onClick={onClick} className={`flex-1 py-2 rounded-xl font-body font-semibold text-sm border transition-colors ${active ? "bg-fuchsia-600 border-fuchsia-600 text-white" : "bg-white border-purple-200 text-purple-500 hover:bg-purple-50"}`}>{children}</button>);
+}
+
+/* ----------------------------- PAGE 4 : AGENDA ----------------------------- */
+
+function AgendaPage({ friends, addFriend, outings, addOuting, removeOuting, recurringPlans, addRecurringPlan, removeRecurringPlan }) {
+  return (
+    <>
+      <div className="mb-3 px-4 py-3 rounded-2xl bg-violet-50 border border-violet-200 font-body text-xs text-violet-800">
+        📍 Cet agenda vit dans ton carnet — ce n'est pas un miroir de ton appli Calendrier iPhone. Chaque sortie planifiée ici peut être exportée d'un tap vers ton vrai calendrier.
+      </div>
+      <AskClaudeCard />
+      <RecurringPlansSection plans={recurringPlans} onAdd={addRecurringPlan} onRemove={removeRecurringPlan} friends={friends} addFriend={addFriend} />
+      <MyAgendaSection outings={outings} recurringPlans={recurringPlans} onAdd={addOuting} onRemove={removeOuting} />
+    </>
+  );
+}
+
+function AskClaudeCard() {
+  const [copied, setCopied] = useState(false);
+  async function handleClick() {
+    try { await navigator.clipboard.writeText(ASK_CLAUDE_PROMPT); setCopied(true); setTimeout(() => setCopied(false), 4000); } catch (e) {}
+    window.open("https://claude.ai/new", "_blank");
+  }
+  return (
+    <div className="bg-white rounded-3xl border border-violet-200 shadow-sm mb-6 overflow-hidden">
+      <div className="px-4 py-3 bg-violet-50 flex items-center gap-2">
+        <IconSparkles size={18} className="text-violet-600" />
+        <h2 className="font-display text-lg text-violet-900 font-semibold">Idée de sortie</h2>
+      </div>
+      <div className="px-4 py-4">
+        <p className="font-body text-sm text-purple-950 mb-3">Pour une organisation créative, demande directement à Claude — il te posera ses questions et te proposera 5 idées sur mesure.</p>
+        <textarea readOnly value={ASK_CLAUDE_PROMPT} onFocus={(e) => e.target.select()} className="w-full h-20 mb-3 px-3 py-2 rounded-xl border border-purple-200 bg-purple-50 font-body text-xs text-purple-900 resize-none" />
+        <button onClick={handleClick} className="w-full py-2.5 rounded-xl bg-fuchsia-600 text-white font-body font-semibold text-sm hover:bg-fuchsia-700 transition-colors">💬 Copier ce message et ouvrir Claude</button>
+        {copied && <p className="font-body text-xs text-fuchsia-700 mt-2 text-center">Copié ! Colle-le dans la conversation qui s'ouvre ✨</p>}
+      </div>
+    </div>
+  );
+}
+
+function RecurringPlansSection({ plans, onAdd, onRemove, friends, addFriend }) {
+  const [showForm, setShowForm] = useState(false);
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState("monthly");
+  const [dayOfWeek, setDayOfWeek] = useState(6);
+  const [weekPosition, setWeekPosition] = useState("1");
+  const [month, setMonth] = useState(12);
+  const [day, setDay] = useState(25);
+  const [seasonIdx, setSeasonIdx] = useState(0);
+  const [note, setNote] = useState("");
+  const [selectedFriendIds, setSelectedFriendIds] = useState([]);
+  const [newFriendName, setNewFriendName] = useState("");
+
+  function toggleFriendSelect(id) { setSelectedFriendIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])); }
+  function handleAddNewFriendInline() { const name = newFriendName.trim(); if (!name) return; const created = addFriend(name); if (created) setSelectedFriendIds((prev) => [...prev, created.id]); setNewFriendName(""); }
+  function handleAdd() {
+    if (!title.trim()) return;
+    const plan = { title: title.trim(), type, seasonMonths: SEASON_PRESETS[seasonIdx].months, note: note.trim(), friendIds: selectedFriendIds };
+    if (type === "weekly") plan.dayOfWeek = dayOfWeek;
+    if (type === "monthly") { plan.dayOfWeek = dayOfWeek; plan.weekPosition = weekPosition; }
+    if (type === "annual") { plan.month = month; plan.day = day; }
+    onAdd(plan);
+    setTitle(""); setNote(""); setSeasonIdx(0); setSelectedFriendIds([]); setShowForm(false);
+  }
+
+  return (
+    <div className="mb-6">
+      <div className="flex items-center justify-between px-1 mb-3">
+        <h2 className="font-display text-lg text-purple-900 font-semibold flex items-center gap-2"><IconRepeat size={18} className="text-fuchsia-600" /> Sorties récurrentes</h2>
+        <button onClick={() => setShowForm((v) => !v)} className="text-xs font-body font-semibold text-fuchsia-700 hover:text-fuchsia-800">{showForm ? "Fermer" : "+ Ajouter"}</button>
+      </div>
+      {showForm && (
+        <div className="bg-white rounded-3xl border border-purple-100 shadow-sm p-4 mb-3 space-y-3">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex : Soirée fille, Brunch dominical…" className="w-full px-3.5 py-2 rounded-xl border border-purple-200 bg-white font-body text-sm text-purple-950 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-500" />
+          <div className="flex gap-1.5">
+            {[["weekly","Hebdo"],["monthly","Mensuelle"],["annual","Annuelle"]].map(([v,l]) => (
+              <button key={v} onClick={() => setType(v)} className={`flex-1 py-1.5 rounded-lg text-xs font-body font-semibold border transition-colors ${type===v?"bg-fuchsia-600 border-fuchsia-600 text-white":"bg-white border-purple-200 text-purple-500"}`}>{l}</button>
+            ))}
+          </div>
+          {(type === "weekly" || type === "monthly") && (
+            <div className="flex gap-2">
+              {type === "monthly" && (<select value={weekPosition} onChange={(e) => setWeekPosition(e.target.value)} className="flex-1 px-2 py-2 rounded-lg border border-purple-200 bg-white font-body text-sm text-purple-950">{WEEK_POSITIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select>)}
+              <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))} className="flex-1 px-2 py-2 rounded-lg border border-purple-200 bg-white font-body text-sm text-purple-950">{DAYS_FR.map((d,i) => <option key={i} value={i}>{d}</option>)}</select>
+            </div>
+          )}
+          {type === "annual" && (
+            <div className="flex gap-2">
+              <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="flex-1 px-2 py-2 rounded-lg border border-purple-200 bg-white font-body text-sm text-purple-950">{MONTHS_FR.map((m,i) => <option key={i} value={i+1}>{m}</option>)}</select>
+              <input type="number" min="1" max="31" value={day} onChange={(e) => setDay(Number(e.target.value))} className="w-20 px-2 py-2 rounded-lg border border-purple-200 bg-white font-body text-sm text-purple-950" />
+            </div>
+          )}
+          {type !== "annual" && (
+            <div className="flex gap-1.5 overflow-x-auto">
+              {SEASON_PRESETS.map((s,i) => (<button key={s.label} onClick={() => setSeasonIdx(i)} className={`px-2.5 py-1.5 rounded-lg text-xs font-body font-semibold border shrink-0 transition-colors ${seasonIdx===i?"bg-violet-600 border-violet-600 text-white":"bg-white border-purple-200 text-purple-500"}`}>{s.label}</button>))}
+            </div>
+          )}
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note libre (ex : quand il fait beau)…" className="w-full px-3.5 py-2 rounded-xl border border-purple-200 bg-white font-body text-sm text-purple-950 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-500" />
+          <div className="pt-1 border-t border-purple-100">
+            <p className="font-body text-xs text-stone-500 mb-1.5 mt-2">Qui est invité ? (facultatif — apparaîtront automatiquement sur la page Rappels)</p>
+            {friends.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {friends.map((f) => (<button key={f.id} type="button" onClick={() => toggleFriendSelect(f.id)} className={`px-3 py-1.5 rounded-full text-xs font-body font-semibold border transition-colors ${selectedFriendIds.includes(f.id)?"bg-fuchsia-600 border-fuchsia-600 text-white":"bg-white border-purple-200 text-purple-500 hover:bg-purple-50"}`}>{f.name}</button>))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input value={newFriendName} onChange={(e) => setNewFriendName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddNewFriendInline())} placeholder="Nouvel·le ami·e…" className="flex-1 px-3 py-1.5 rounded-lg border border-purple-200 bg-white font-body text-xs text-purple-950 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-500" />
+              <button type="button" onClick={handleAddNewFriendInline} className="px-3 py-1.5 rounded-lg border border-purple-200 text-purple-600 text-xs font-body font-semibold hover:bg-purple-50">+ Ajouter</button>
+            </div>
+          </div>
+          <button onClick={handleAdd} className="w-full py-2 rounded-xl bg-fuchsia-600 text-white font-body font-semibold text-sm hover:bg-fuchsia-700 transition-colors">Ajouter cette récurrence</button>
+        </div>
+      )}
+      {plans.length === 0 ? (
+        <p className="font-body text-sm text-stone-400 px-1">Aucune sortie récurrente pour l'instant.</p>
+      ) : (
+        <div className="space-y-2">
+          {plans.map((p) => {
+            const next = nextOccurrence(p);
+            const invitedNames = (p.friendIds || []).map((fid) => friends.find((f) => f.id === fid)?.name).filter(Boolean);
+            return (
+              <div key={p.id} className="bg-white rounded-2xl border border-purple-100 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-body font-semibold text-purple-950 truncate">{p.title}</p>
+                  <p className="font-body text-xs text-stone-500">{recurrenceLabel(p)}{p.seasonMonths ? ` · ${SEASON_PRESETS.find((s) => JSON.stringify(s.months)===JSON.stringify(p.seasonMonths))?.label||""}` : ""}</p>
+                  {p.note && <p className="font-body text-xs text-violet-500 italic truncate">{p.note}</p>}
+                  {invitedNames.length > 0 && <p className="font-body text-xs text-purple-400 truncate">Avec {invitedNames.join(", ")}</p>}
+                  <p className="font-body text-xs text-fuchsia-700 font-semibold mt-0.5">{next ? `Prochaine fois : ${formatDateFR(next)}` : "Pas de prochaine occurrence"}</p>
+                </div>
+                <button onClick={() => onRemove(p.id)} className="text-stone-300 hover:text-red-600 transition-colors shrink-0"><IconTrash size={16} /></button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MyAgendaSection({ outings, recurringPlans, onAdd, onRemove }) {
+  const [showForm, setShowForm] = useState(false);
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState("");
+  const [notes, setNotes] = useState("");
+  function handleAdd() { if (!title.trim() || !date) return; onAdd({ title: title.trim(), date, notes: notes.trim(), source: "manual" }); setTitle(""); setDate(""); setNotes(""); setShowForm(false); }
+
+  const todayIso = isoDate(todayMidnight());
+  const recurringUpcoming = recurringPlans.map((p) => { const next = nextOccurrence(p); return next ? { id: `rec-${p.id}`, title: p.title, date: isoDate(next), notes: p.note || "", recurring: true } : null; }).filter(Boolean);
+  const upcoming = [...outings.filter((o) => o.date >= todayIso), ...recurringUpcoming].sort((a, b) => a.date.localeCompare(b.date));
+  const past = outings.filter((o) => o.date < todayIso).sort((a, b) => b.date.localeCompare(a.date));
+
+  return (
+    <div>
+      <div className="flex items-center justify-between px-1 mb-3">
+        <h2 className="font-display text-lg text-purple-900 font-semibold flex items-center gap-2"><IconCalendar size={18} className="text-fuchsia-600" /> Mon agenda</h2>
+        <button onClick={() => setShowForm((v) => !v)} className="text-xs font-body font-semibold text-fuchsia-700 hover:text-fuchsia-800">{showForm ? "Fermer" : "+ Ajouter"}</button>
+      </div>
+      {showForm && (
+        <div className="bg-white rounded-3xl border border-purple-100 shadow-sm p-4 mb-4 space-y-2">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Titre de la sortie…" className="w-full px-3.5 py-2 rounded-xl border border-purple-200 bg-white font-body text-sm text-purple-950 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-500" />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-3.5 py-2 rounded-xl border border-purple-200 bg-white font-body text-sm text-purple-950 focus:outline-none focus:ring-2 focus:ring-fuchsia-500" />
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes (facultatif)…" className="w-full px-3.5 py-2 rounded-xl border border-purple-200 bg-white font-body text-sm text-purple-950 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-500" />
+          <p className="font-body text-xs text-stone-400">Une date passée ira directement dans l'historique.</p>
+          <button onClick={handleAdd} className="w-full py-2 rounded-xl bg-fuchsia-600 text-white font-body font-semibold text-sm hover:bg-fuchsia-700 transition-colors">Ajouter</button>
+        </div>
+      )}
+      <p className="font-body text-xs uppercase tracking-widest text-stone-400 px-1 mb-2">À venir</p>
+      {upcoming.length === 0 ? (<p className="font-body text-sm text-stone-400 px-1 mb-4">Rien de programmé pour l'instant.</p>) : (
+        <div className="space-y-2 mb-5">
+          {upcoming.map((o) => (
+            <div key={o.id} className="bg-white rounded-2xl border border-violet-200 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-body font-semibold text-purple-950 truncate">{o.title}{o.recurring && <span className="ml-1.5 text-xs font-normal text-violet-400">(récurrent)</span>}</p>
+                <p className="font-body text-xs text-stone-500">{formatDateFR(new Date(o.date + "T00:00:00"))}</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => downloadICS(o.title, o.date, o.notes)} className="text-violet-400 hover:text-violet-700 transition-colors"><IconDownload size={17} /></button>
+                {!o.recurring && (<button onClick={() => onRemove(o.id)} className="text-stone-300 hover:text-red-600 transition-colors"><IconTrash size={16} /></button>)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="font-body text-xs uppercase tracking-widest text-stone-400 px-1 mb-2">💭 Historique</p>
+      {past.length === 0 ? (<p className="font-body text-sm text-stone-400 px-1">Pas encore de souvenirs enregistrés.</p>) : (
+        <div className="space-y-2">
+          {past.map((o) => (
+            <div key={o.id} className="bg-white rounded-2xl border border-pink-200 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
+              <div className="min-w-0"><p className="font-body font-semibold text-purple-950 truncate">{o.title}</p><p className="font-body text-xs text-stone-500">{formatDateFR(new Date(o.date + "T00:00:00"))}</p></div>
+              <button onClick={() => onRemove(o.id)} className="text-stone-300 hover:text-red-600 transition-colors shrink-0"><IconTrash size={16} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<AmitieTracker />);
+</script>
+</body>
+</html>
