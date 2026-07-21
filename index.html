@@ -69,6 +69,7 @@ const IconDownload = (p) => (<IconBase {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a
 /* ---------------------------------------------------------------------- */
 
 const MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+const MONTHS_SHORT = ["Janv","Févr","Mars","Avr","Mai","Juin","Juil","Août","Sept","Oct","Nov","Déc"];
 const DAYS_FR = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
 const STORAGE_KEY = "amitie-data";
 
@@ -104,7 +105,14 @@ function monthLabel(key) { const [y,m]=key.split("-").map(Number); return `${MON
 function compareMonthKeysDesc(a,b) { return a<b?1:a>b?-1:0; }
 function monthsBetween(aKey,bKey){ const [ay,am]=aKey.split("-").map(Number); const [by,bm]=bKey.split("-").map(Number); return (by-ay)*12+(bm-am); }
 function getFutureMonthKeys(n){ const keys=[]; const d=new Date(); for(let i=1;i<=n;i++){ const f=new Date(d.getFullYear(),d.getMonth()+i,1); keys.push(monthKey(f)); } return keys; }
-function friendAppearsInMonth(friend,targetKey,currentKey){ if(targetKey===currentKey) return true; const offset=monthsBetween(currentKey,targetKey); const step=FREQUENCY_MONTHS[friend.frequency]||1; return offset>0 && offset%step===0; }
+function friendAppearsInMonth(friend,targetKey,currentKey){
+  if(targetKey===currentKey) return true;
+  if (friend.customMonths && friend.customMonths.length > 0) {
+    const m = Number(targetKey.split("-")[1]);
+    return friend.customMonths.includes(m);
+  }
+  const offset=monthsBetween(currentKey,targetKey); const step=FREQUENCY_MONTHS[friend.frequency]||1; return offset>0 && offset%step===0;
+}
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function isoDate(date){ return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`; }
 function formatDateFR(date){ return `${DAYS_FR[date.getDay()]} ${date.getDate()} ${MONTHS_FR[date.getMonth()].toLowerCase()} ${date.getFullYear()}`; }
@@ -229,16 +237,17 @@ function AmitieTracker() {
     setError(ok ? null : "La sauvegarde locale a échoué (mémoire du navigateur peut-être pleine).");
   }, [friends, checksByMonth, outings, recurringPlans, loaded]);
 
-  function addFriend(name, frequency = "monthly") {
+  function addFriend(name, frequency = "monthly", customMonths = null) {
     const trimmed = name.trim();
     if (!trimmed) return null;
-    const newFriend = { id: uid(), name: trimmed, frequency };
+    const newFriend = { id: uid(), name: trimmed, frequency, customMonths: customMonths && customMonths.length ? customMonths : null };
     setFriends((prev) => [...prev, newFriend]);
     return newFriend;
   }
   function renameFriend(id, name) { setFriends((prev) => prev.map((f) => (f.id === id ? { ...f, name } : f))); }
   function removeFriend(id) { setFriends((prev) => prev.filter((f) => f.id !== id)); }
   function setFriendFrequency(id, frequency) { setFriends((prev) => prev.map((f) => (f.id === id ? { ...f, frequency } : f))); }
+  function setFriendCustomMonths(id, customMonths) { setFriends((prev) => prev.map((f) => (f.id === id ? { ...f, customMonths: customMonths && customMonths.length ? customMonths : null } : f))); }
   function toggleCheck(key, friendId) {
     setChecksByMonth((prev) => {
       const entry = prev[key] || { checks: {} };
@@ -258,6 +267,7 @@ function AmitieTracker() {
   function removeOuting(id) { setOutings((prev) => prev.filter((o) => o.id !== id)); }
   function addRecurringPlan(plan) { setRecurringPlans((prev) => [...prev, { id: uid(), ...plan }]); }
   function removeRecurringPlan(id) { setRecurringPlans((prev) => prev.filter((p) => p.id !== id)); }
+  function toggleRecurringPlanActive(id) { setRecurringPlans((prev) => prev.map((p) => (p.id === id ? { ...p, active: p.active === false ? true : false } : p))); }
 
   if (!loaded) {
     return (
@@ -287,11 +297,11 @@ function AmitieTracker() {
           )}
           {page === "stats" && <StatsPage friends={friends} checksByMonth={checksByMonth} currentKey={currentKey} />}
           {page === "settings" && (
-            <SettingsPage friends={friends} addFriend={addFriend} renameFriend={renameFriend} removeFriend={removeFriend} setFriendFrequency={setFriendFrequency} />
+            <SettingsPage friends={friends} addFriend={addFriend} renameFriend={renameFriend} removeFriend={removeFriend} setFriendFrequency={setFriendFrequency} setFriendCustomMonths={setFriendCustomMonths} />
           )}
           {page === "agenda" && (
             <AgendaPage friends={friends} addFriend={addFriend} outings={outings} addOuting={addOuting} removeOuting={removeOuting}
-              recurringPlans={recurringPlans} addRecurringPlan={addRecurringPlan} removeRecurringPlan={removeRecurringPlan} />
+              recurringPlans={recurringPlans} addRecurringPlan={addRecurringPlan} removeRecurringPlan={removeRecurringPlan} toggleRecurringPlanActive={toggleRecurringPlanActive} />
           )}
         </main>
       </div>
@@ -321,13 +331,19 @@ function NavButton({ label, Icon, active, onClick }) {
 
 function ReminderPage({ friends, checksByMonth, currentKey, addFriend, renameFriend, removeFriend, toggleCheck, removeFromMonth, recurringPlans }) {
   const [newName, setNewName] = useState("");
+  const [addMode, setAddMode] = useState("all"); // "all" | "custom"
+  const [addMonths, setAddMonths] = useState([]);
   const [unlockedMonths, setUnlockedMonths] = useState({});
   const currentCardRef = useRef(null);
 
   useEffect(() => { currentCardRef.current?.scrollIntoView({ block: "start" }); }, []);
 
   function toggleUnlock(key) { setUnlockedMonths((prev) => ({ ...prev, [key]: !prev[key] })); }
-  function handleAdd() { addFriend(newName); setNewName(""); }
+  function handleAdd() {
+    if (addMode === "custom" && addMonths.length > 0) addFriend(newName, "monthly", addMonths);
+    else addFriend(newName);
+    setNewName(""); setAddMode("all"); setAddMonths([]);
+  }
 
   const futureKeys = useMemo(() => getFutureMonthKeys(12).sort(compareMonthKeysDesc), [currentKey]);
   const pastKeys = Object.keys(checksByMonth).filter((k) => k < currentKey).sort(compareMonthKeysDesc);
@@ -341,7 +357,7 @@ function ReminderPage({ friends, checksByMonth, currentKey, addFriend, renameFri
             const entry = checksByMonth[key] || {};
             const excludedIds = entry.excludedIds || [];
             const recurringFriendIds = new Set();
-            recurringPlans.forEach((p) => { if (planOccursInMonth(p, key)) (p.friendIds || []).forEach((fid) => recurringFriendIds.add(fid)); });
+            recurringPlans.forEach((p) => { if (p.active === false) return; if (planOccursInMonth(p, key)) (p.friendIds || []).forEach((fid) => recurringFriendIds.add(fid)); });
             const rosterFriends = friends.filter((f) => (friendAppearsInMonth(f, key, currentKey) || recurringFriendIds.has(f.id)) && !excludedIds.includes(f.id));
             return (
               <MonthCard key={key} label={monthLabel(key)} isCurrent={false} theme="future"
@@ -361,13 +377,20 @@ function ReminderPage({ friends, checksByMonth, currentKey, addFriend, renameFri
           emptyText="Ton carnet est encore vierge — ajoute un·e ami·e pour commencer l'aventure !" />
       </div>
 
-      <div className="flex gap-2 mt-3 mb-4">
+      <div className="flex gap-2 mt-3 mb-2">
         <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAdd()} placeholder="Ajouter un·e ami·e…" className="flex-1 px-4 py-2.5 rounded-xl border border-purple-200 bg-white font-body text-purple-950 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-500" />
         <button onClick={handleAdd} className="px-4 py-2.5 rounded-xl bg-fuchsia-600 text-white flex items-center gap-1.5 font-body font-semibold hover:bg-fuchsia-700 transition-colors">
           <IconPlus size={18} /> Ajouter
         </button>
       </div>
-      <p className="font-body text-xs text-stone-400 mb-6 px-1">Envie d'un rythme personnalisé pour quelqu'un ? Direction l'onglet Paramètres.</p>
+      <div className="flex gap-1.5 mb-2">
+        <button type="button" onClick={() => setAddMode("all")} className={`flex-1 py-1.5 rounded-lg text-xs font-body font-semibold border transition-colors ${addMode === "all" ? "bg-fuchsia-600 border-fuchsia-600 text-white" : "bg-white border-purple-200 text-purple-500"}`}>Tous les mois à venir</button>
+        <button type="button" onClick={() => setAddMode("custom")} className={`flex-1 py-1.5 rounded-lg text-xs font-body font-semibold border transition-colors ${addMode === "custom" ? "bg-fuchsia-600 border-fuchsia-600 text-white" : "bg-white border-purple-200 text-purple-500"}`}>Mois spécifiques</button>
+      </div>
+      {addMode === "custom" && (
+        <div className="mb-3"><MonthsPicker selected={addMonths} onChange={setAddMonths} /></div>
+      )}
+      <p className="font-body text-xs text-stone-400 mb-6 px-1">Envie d'un rythme différent (6 mois, 1 an) pour quelqu'un ? Direction l'onglet Paramètres.</p>
 
       {pastKeys.length > 0 && (
         <div className="space-y-5">
@@ -426,7 +449,7 @@ function MonthCard({ label, isCurrent, theme, unlocked, friends, checks, onToggl
 
 /* -------------------------- PAGE 2 : PARAMÈTRES --------------------------- */
 
-function SettingsPage({ friends, addFriend, renameFriend, removeFriend, setFriendFrequency }) {
+function SettingsPage({ friends, addFriend, renameFriend, removeFriend, setFriendFrequency, setFriendCustomMonths }) {
   const [newName, setNewName] = useState("");
   const [newFrequency, setNewFrequency] = useState("monthly");
   function handleAdd() { if (!newName.trim()) return; addFriend(newName, newFrequency); setNewName(""); setNewFrequency("monthly"); }
@@ -445,18 +468,45 @@ function SettingsPage({ friends, addFriend, renameFriend, removeFriend, setFrien
         <div className="text-center py-12 px-6"><IconSparkles size={28} className="mx-auto mb-3 text-fuchsia-300" /><p className="font-body text-stone-400 text-sm">Ta liste d'ami·e·s attend son premier nom !</p></div>
       ) : (
         <div className="space-y-3">
-          {friends.map((f) => (
-            <div key={f.id} className="bg-white rounded-3xl border border-purple-100 p-4 shadow-sm">
-              <div className="flex items-center gap-3 mb-3">
-                <input value={f.name} onChange={(e) => renameFriend(f.id, e.target.value)} className="flex-1 bg-transparent font-body text-purple-950 focus:outline-none focus:bg-fuchsia-50 rounded px-1.5 py-0.5" />
-                <button onClick={() => removeFriend(f.id)} className="text-stone-300 hover:text-red-600 transition-colors"><IconTrash size={16} /></button>
+          {friends.map((f) => {
+            const isCustom = !!(f.customMonths && f.customMonths.length > 0);
+            return (
+              <div key={f.id} className="bg-white rounded-3xl border border-purple-100 p-4 shadow-sm">
+                <div className="flex items-center gap-3 mb-3">
+                  <input value={f.name} onChange={(e) => renameFriend(f.id, e.target.value)} className="flex-1 bg-transparent font-body text-purple-950 focus:outline-none focus:bg-fuchsia-50 rounded px-1.5 py-0.5" />
+                  <button onClick={() => removeFriend(f.id)} className="text-stone-300 hover:text-red-600 transition-colors"><IconTrash size={16} /></button>
+                </div>
+                <FrequencyPicker value={f.frequency || "monthly"} onChange={(freq) => setFriendFrequency(f.id, freq)} />
+                <label className="flex items-center gap-2 mt-3">
+                  <input type="checkbox" checked={isCustom} onChange={(e) => setFriendCustomMonths(f.id, e.target.checked ? (f.customMonths || []) : null)} className="w-4 h-4 accent-fuchsia-600" />
+                  <span className="font-body text-xs text-purple-600">Choisir des mois précis à la place</span>
+                </label>
+                {isCustom && (
+                  <div className="mt-2"><MonthsPicker selected={f.customMonths || []} onChange={(months) => setFriendCustomMonths(f.id, months)} /></div>
+                )}
               </div>
-              <FrequencyPicker value={f.frequency || "monthly"} onChange={(freq) => setFriendFrequency(f.id, freq)} />
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>
+  );
+}
+
+function MonthsPicker({ selected, onChange }) {
+  function toggle(m) { onChange(selected.includes(m) ? selected.filter((x) => x !== m) : [...selected, m].sort((a, b) => a - b)); }
+  return (
+    <div className="grid grid-cols-4 gap-1.5">
+      {MONTHS_SHORT.map((label, i) => {
+        const m = i + 1;
+        const active = selected.includes(m);
+        return (
+          <button key={m} type="button" onClick={() => toggle(m)} className={`py-1.5 rounded-lg text-xs font-body font-semibold border transition-colors ${active ? "bg-fuchsia-600 border-fuchsia-600 text-white" : "bg-white border-purple-200 text-purple-500"}`}>
+            {label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -581,14 +631,14 @@ function SegButton({ active, onClick, children }) {
 
 /* ----------------------------- PAGE 4 : AGENDA ----------------------------- */
 
-function AgendaPage({ friends, addFriend, outings, addOuting, removeOuting, recurringPlans, addRecurringPlan, removeRecurringPlan }) {
+function AgendaPage({ friends, addFriend, outings, addOuting, removeOuting, recurringPlans, addRecurringPlan, removeRecurringPlan, toggleRecurringPlanActive }) {
   return (
     <>
       <div className="mb-3 px-4 py-3 rounded-2xl bg-violet-50 border border-violet-200 font-body text-xs text-violet-800">
         📍 Cet agenda vit dans ton carnet — ce n'est pas un miroir de ton appli Calendrier iPhone. Chaque sortie planifiée ici peut être exportée d'un tap vers ton vrai calendrier.
       </div>
       <AskClaudeCard />
-      <RecurringPlansSection plans={recurringPlans} onAdd={addRecurringPlan} onRemove={removeRecurringPlan} friends={friends} addFriend={addFriend} />
+      <RecurringPlansSection plans={recurringPlans} onAdd={addRecurringPlan} onRemove={removeRecurringPlan} onToggleActive={toggleRecurringPlanActive} friends={friends} addFriend={addFriend} />
       <MyAgendaSection outings={outings} recurringPlans={recurringPlans} onAdd={addOuting} onRemove={removeOuting} />
     </>
   );
@@ -616,7 +666,7 @@ function AskClaudeCard() {
   );
 }
 
-function RecurringPlansSection({ plans, onAdd, onRemove, friends, addFriend }) {
+function RecurringPlansSection({ plans, onAdd, onRemove, onToggleActive, friends, addFriend }) {
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [type, setType] = useState("monthly");
@@ -633,7 +683,7 @@ function RecurringPlansSection({ plans, onAdd, onRemove, friends, addFriend }) {
   function handleAddNewFriendInline() { const name = newFriendName.trim(); if (!name) return; const created = addFriend(name); if (created) setSelectedFriendIds((prev) => [...prev, created.id]); setNewFriendName(""); }
   function handleAdd() {
     if (!title.trim()) return;
-    const plan = { title: title.trim(), type, seasonMonths: SEASON_PRESETS[seasonIdx].months, note: note.trim(), friendIds: selectedFriendIds };
+    const plan = { title: title.trim(), type, seasonMonths: SEASON_PRESETS[seasonIdx].months, note: note.trim(), friendIds: selectedFriendIds, active: true };
     if (type === "weekly") plan.dayOfWeek = dayOfWeek;
     if (type === "monthly") { plan.dayOfWeek = dayOfWeek; plan.weekPosition = weekPosition; }
     if (type === "annual") { plan.month = month; plan.day = day; }
@@ -693,16 +743,18 @@ function RecurringPlansSection({ plans, onAdd, onRemove, friends, addFriend }) {
       ) : (
         <div className="space-y-2">
           {plans.map((p) => {
-            const next = nextOccurrence(p);
+            const isActive = p.active !== false;
+            const next = isActive ? nextOccurrence(p) : null;
             const invitedNames = (p.friendIds || []).map((fid) => friends.find((f) => f.id === fid)?.name).filter(Boolean);
             return (
-              <div key={p.id} className="bg-white rounded-2xl border border-purple-100 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
+              <div key={p.id} className={`bg-white rounded-2xl border shadow-sm px-4 py-3 flex items-center gap-3 transition-colors ${isActive ? "border-purple-100" : "border-purple-100 opacity-60"}`}>
+                <input type="checkbox" checked={isActive} onChange={() => onToggleActive(p.id)} aria-label={isActive ? "Mettre en pause" : "Réactiver"} className="w-5 h-5 shrink-0 accent-fuchsia-600 cursor-pointer" />
+                <div className="min-w-0 flex-1">
                   <p className="font-body font-semibold text-purple-950 truncate">{p.title}</p>
                   <p className="font-body text-xs text-stone-500">{recurrenceLabel(p)}{p.seasonMonths ? ` · ${SEASON_PRESETS.find((s) => JSON.stringify(s.months)===JSON.stringify(p.seasonMonths))?.label||""}` : ""}</p>
                   {p.note && <p className="font-body text-xs text-violet-500 italic truncate">{p.note}</p>}
                   {invitedNames.length > 0 && <p className="font-body text-xs text-purple-400 truncate">Avec {invitedNames.join(", ")}</p>}
-                  <p className="font-body text-xs text-fuchsia-700 font-semibold mt-0.5">{next ? `Prochaine fois : ${formatDateFR(next)}` : "Pas de prochaine occurrence"}</p>
+                  <p className="font-body text-xs text-fuchsia-700 font-semibold mt-0.5">{!isActive ? "En pause" : next ? `Prochaine fois : ${formatDateFR(next)}` : "Pas de prochaine occurrence"}</p>
                 </div>
                 <button onClick={() => onRemove(p.id)} className="text-stone-300 hover:text-red-600 transition-colors shrink-0"><IconTrash size={16} /></button>
               </div>
@@ -722,7 +774,7 @@ function MyAgendaSection({ outings, recurringPlans, onAdd, onRemove }) {
   function handleAdd() { if (!title.trim() || !date) return; onAdd({ title: title.trim(), date, notes: notes.trim(), source: "manual" }); setTitle(""); setDate(""); setNotes(""); setShowForm(false); }
 
   const todayIso = isoDate(todayMidnight());
-  const recurringUpcoming = recurringPlans.map((p) => { const next = nextOccurrence(p); return next ? { id: `rec-${p.id}`, title: p.title, date: isoDate(next), notes: p.note || "", recurring: true } : null; }).filter(Boolean);
+  const recurringUpcoming = recurringPlans.filter((p) => p.active !== false).map((p) => { const next = nextOccurrence(p); return next ? { id: `rec-${p.id}`, title: p.title, date: isoDate(next), notes: p.note || "", recurring: true } : null; }).filter(Boolean);
   const upcoming = [...outings.filter((o) => o.date >= todayIso), ...recurringUpcoming].sort((a, b) => a.date.localeCompare(b.date));
   const past = outings.filter((o) => o.date < todayIso).sort((a, b) => b.date.localeCompare(a.date));
 
@@ -749,6 +801,7 @@ function MyAgendaSection({ outings, recurringPlans, onAdd, onRemove }) {
               <div className="min-w-0">
                 <p className="font-body font-semibold text-purple-950 truncate">{o.title}{o.recurring && <span className="ml-1.5 text-xs font-normal text-violet-400">(récurrent)</span>}</p>
                 <p className="font-body text-xs text-stone-500">{formatDateFR(new Date(o.date + "T00:00:00"))}</p>
+                {o.notes && <p className="font-body text-xs text-stone-600 mt-0.5">{o.notes}</p>}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button onClick={() => downloadICS(o.title, o.date, o.notes)} className="text-violet-400 hover:text-violet-700 transition-colors"><IconDownload size={17} /></button>
@@ -763,7 +816,7 @@ function MyAgendaSection({ outings, recurringPlans, onAdd, onRemove }) {
         <div className="space-y-2">
           {past.map((o) => (
             <div key={o.id} className="bg-white rounded-2xl border border-pink-200 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
-              <div className="min-w-0"><p className="font-body font-semibold text-purple-950 truncate">{o.title}</p><p className="font-body text-xs text-stone-500">{formatDateFR(new Date(o.date + "T00:00:00"))}</p></div>
+              <div className="min-w-0"><p className="font-body font-semibold text-purple-950 truncate">{o.title}</p><p className="font-body text-xs text-stone-500">{formatDateFR(new Date(o.date + "T00:00:00"))}</p>{o.notes && <p className="font-body text-xs text-stone-600 mt-0.5">{o.notes}</p>}</div>
               <button onClick={() => onRemove(o.id)} className="text-stone-300 hover:text-red-600 transition-colors shrink-0"><IconTrash size={16} /></button>
             </div>
           ))}
