@@ -137,6 +137,19 @@ function nextOccurrence(plan, from = todayMidnight()){
   }
   return null;
 }
+// Like nextOccurrence, but skips any date the person has already checked off as done —
+// so ticking the box for "today's" occurrence advances the recurring plan to the next one.
+function nextUncompletedOccurrence(plan, from = todayMidnight()) {
+  const completed = new Set(plan.completedOccurrences || []);
+  let candidate = nextOccurrence(plan, from);
+  let guard = 0;
+  while (candidate && completed.has(isoDate(candidate)) && guard < 40) {
+    const dayAfter = new Date(candidate.getFullYear(), candidate.getMonth(), candidate.getDate() + 1);
+    candidate = nextOccurrence(plan, dayAfter);
+    guard++;
+  }
+  return candidate;
+}
 function planOccursInMonth(plan,monthKeyStr){
   const [y,m]=monthKeyStr.split("-").map(Number); const monthStart=new Date(y,m-1,1);
   if(plan.type==="annual") return plan.month===m;
@@ -265,6 +278,21 @@ function AmitieTracker() {
   }
   function addOuting(outing) { setOutings((prev) => [...prev, { id: uid(), ...outing }]); }
   function removeOuting(id) { setOutings((prev) => prev.filter((o) => o.id !== id)); }
+  function toggleOutingDone(id) { setOutings((prev) => prev.map((o) => (o.id === id ? { ...o, done: !o.done } : o))); }
+  function markRecurringOccurrenceDone(planId, dateIso) {
+    setRecurringPlans((prev) => prev.map((p) => {
+      if (p.id !== planId) return p;
+      const completed = new Set(p.completedOccurrences || []);
+      completed.add(dateIso);
+      return { ...p, completedOccurrences: Array.from(completed) };
+    }));
+  }
+  function unmarkRecurringOccurrenceDone(planId, dateIso) {
+    setRecurringPlans((prev) => prev.map((p) => {
+      if (p.id !== planId) return p;
+      return { ...p, completedOccurrences: (p.completedOccurrences || []).filter((d) => d !== dateIso) };
+    }));
+  }
   function addRecurringPlan(plan) { setRecurringPlans((prev) => [...prev, { id: uid(), ...plan }]); }
   function removeRecurringPlan(id) { setRecurringPlans((prev) => prev.filter((p) => p.id !== id)); }
   function toggleRecurringPlanActive(id) { setRecurringPlans((prev) => prev.map((p) => (p.id === id ? { ...p, active: p.active === false ? true : false } : p))); }
@@ -301,7 +329,8 @@ function AmitieTracker() {
           )}
           {page === "agenda" && (
             <AgendaPage friends={friends} addFriend={addFriend} outings={outings} addOuting={addOuting} removeOuting={removeOuting}
-              recurringPlans={recurringPlans} addRecurringPlan={addRecurringPlan} removeRecurringPlan={removeRecurringPlan} toggleRecurringPlanActive={toggleRecurringPlanActive} />
+              recurringPlans={recurringPlans} addRecurringPlan={addRecurringPlan} removeRecurringPlan={removeRecurringPlan} toggleRecurringPlanActive={toggleRecurringPlanActive}
+              toggleOutingDone={toggleOutingDone} markRecurringOccurrenceDone={markRecurringOccurrenceDone} unmarkRecurringOccurrenceDone={unmarkRecurringOccurrenceDone} />
           )}
         </main>
       </div>
@@ -631,7 +660,7 @@ function SegButton({ active, onClick, children }) {
 
 /* ----------------------------- PAGE 4 : AGENDA ----------------------------- */
 
-function AgendaPage({ friends, addFriend, outings, addOuting, removeOuting, recurringPlans, addRecurringPlan, removeRecurringPlan, toggleRecurringPlanActive }) {
+function AgendaPage({ friends, addFriend, outings, addOuting, removeOuting, recurringPlans, addRecurringPlan, removeRecurringPlan, toggleRecurringPlanActive, toggleOutingDone, markRecurringOccurrenceDone, unmarkRecurringOccurrenceDone }) {
   return (
     <>
       <div className="mb-3 px-4 py-3 rounded-2xl bg-violet-50 border border-violet-200 font-body text-xs text-violet-800">
@@ -639,7 +668,7 @@ function AgendaPage({ friends, addFriend, outings, addOuting, removeOuting, recu
       </div>
       <AskClaudeCard />
       <RecurringPlansSection plans={recurringPlans} onAdd={addRecurringPlan} onRemove={removeRecurringPlan} onToggleActive={toggleRecurringPlanActive} friends={friends} addFriend={addFriend} />
-      <MyAgendaSection outings={outings} recurringPlans={recurringPlans} onAdd={addOuting} onRemove={removeOuting} />
+      <MyAgendaSection outings={outings} recurringPlans={recurringPlans} onAdd={addOuting} onRemove={removeOuting} onToggleOutingDone={toggleOutingDone} onMarkRecurringDone={markRecurringOccurrenceDone} onUnmarkRecurringDone={unmarkRecurringOccurrenceDone} />
     </>
   );
 }
@@ -766,7 +795,7 @@ function RecurringPlansSection({ plans, onAdd, onRemove, onToggleActive, friends
   );
 }
 
-function MyAgendaSection({ outings, recurringPlans, onAdd, onRemove }) {
+function MyAgendaSection({ outings, recurringPlans, onAdd, onRemove, onToggleOutingDone, onMarkRecurringDone, onUnmarkRecurringDone }) {
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
@@ -774,9 +803,14 @@ function MyAgendaSection({ outings, recurringPlans, onAdd, onRemove }) {
   function handleAdd() { if (!title.trim() || !date) return; onAdd({ title: title.trim(), date, notes: notes.trim(), source: "manual" }); setTitle(""); setDate(""); setNotes(""); setShowForm(false); }
 
   const todayIso = isoDate(todayMidnight());
-  const recurringUpcoming = recurringPlans.filter((p) => p.active !== false).map((p) => { const next = nextOccurrence(p); return next ? { id: `rec-${p.id}`, title: p.title, date: isoDate(next), notes: p.note || "", recurring: true } : null; }).filter(Boolean);
-  const upcoming = [...outings.filter((o) => o.date >= todayIso), ...recurringUpcoming].sort((a, b) => a.date.localeCompare(b.date));
-  const past = outings.filter((o) => o.date < todayIso).sort((a, b) => b.date.localeCompare(a.date));
+  const recurringUpcoming = recurringPlans.filter((p) => p.active !== false).map((p) => {
+    const next = nextUncompletedOccurrence(p);
+    return next ? { id: `rec-${p.id}-${isoDate(next)}`, planId: p.id, title: p.title, date: isoDate(next), notes: p.note || "", recurring: true } : null;
+  }).filter(Boolean);
+  const upcoming = [...outings.filter((o) => o.date >= todayIso && !o.done), ...recurringUpcoming].sort((a, b) => a.date.localeCompare(b.date));
+
+  const completedRecurringPast = recurringPlans.flatMap((p) => (p.completedOccurrences || []).map((d) => ({ id: `rec-done-${p.id}-${d}`, planId: p.id, title: p.title, date: d, notes: p.note || "", recurring: true })));
+  const past = [...outings.filter((o) => o.date < todayIso || o.done), ...completedRecurringPast].sort((a, b) => b.date.localeCompare(a.date));
 
   return (
     <div>
@@ -797,8 +831,9 @@ function MyAgendaSection({ outings, recurringPlans, onAdd, onRemove }) {
       {upcoming.length === 0 ? (<p className="font-body text-sm text-stone-400 px-1 mb-4">Rien de programmé pour l'instant.</p>) : (
         <div className="space-y-2 mb-5">
           {upcoming.map((o) => (
-            <div key={o.id} className="bg-white rounded-2xl border border-violet-200 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
-              <div className="min-w-0">
+            <div key={o.id} className="bg-white rounded-2xl border border-violet-200 shadow-sm px-4 py-3 flex items-center gap-3">
+              <input type="checkbox" checked={false} onChange={() => (o.recurring ? onMarkRecurringDone(o.planId, o.date) : onToggleOutingDone(o.id))} aria-label="Marquer comme fait" className="w-5 h-5 shrink-0 accent-fuchsia-600 cursor-pointer" />
+              <div className="min-w-0 flex-1">
                 <p className="font-body font-semibold text-purple-950 truncate">{o.title}{o.recurring && <span className="ml-1.5 text-xs font-normal text-violet-400">(récurrent)</span>}</p>
                 <p className="font-body text-xs text-stone-500">{formatDateFR(new Date(o.date + "T00:00:00"))}</p>
                 {o.notes && <p className="font-body text-xs text-stone-600 mt-0.5">{o.notes}</p>}
@@ -817,7 +852,7 @@ function MyAgendaSection({ outings, recurringPlans, onAdd, onRemove }) {
           {past.map((o) => (
             <div key={o.id} className="bg-white rounded-2xl border border-pink-200 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
               <div className="min-w-0"><p className="font-body font-semibold text-purple-950 truncate">{o.title}</p><p className="font-body text-xs text-stone-500">{formatDateFR(new Date(o.date + "T00:00:00"))}</p>{o.notes && <p className="font-body text-xs text-stone-600 mt-0.5">{o.notes}</p>}</div>
-              <button onClick={() => onRemove(o.id)} className="text-stone-300 hover:text-red-600 transition-colors shrink-0"><IconTrash size={16} /></button>
+              <button onClick={() => (o.recurring ? onUnmarkRecurringDone(o.planId, o.date) : onRemove(o.id))} aria-label="Retirer de l'historique" className="text-stone-300 hover:text-red-600 transition-colors shrink-0"><IconTrash size={16} /></button>
             </div>
           ))}
         </div>
